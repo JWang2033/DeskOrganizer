@@ -2,6 +2,9 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 import json
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # ====== Router ======
 router = APIRouter()
@@ -15,7 +18,7 @@ class TextRequest(BaseModel):
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 
-# ====== PROMPT (占位版本) ======
+# ====== PROMPT ======
 def build_prompt(user_text: str) -> str:
     return f"""
 You are a system that converts natural language into JSON.
@@ -36,14 +39,14 @@ Example format (placeholder, can change later):
 """
 
 
-# ====== AI CALL (占位 + fallback) ======
+# ====== AI CALL ======
 def call_ai(prompt: str) -> str:
     try:
         from openai import OpenAI
         client = OpenAI(api_key=OPENAI_API_KEY)
 
         response = client.chat.completions.create(
-            model="gpt-5",
+            model="gpt-4o",
             messages=[
                 {"role": "system", "content": "You output JSON only."},
                 {"role": "user", "content": prompt}
@@ -69,7 +72,6 @@ def call_ai(prompt: str) -> str:
 # ====== PARSE JSON ======
 def safe_parse_json(text: str):
     try:
-        # 去掉 ```json 这种情况
         text = text.strip()
         if text.startswith("```"):
             text = text.split("```")[1]
