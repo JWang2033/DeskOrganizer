@@ -16,7 +16,7 @@ def storage_tray(unitsX=3, unitsY=3, unitsZ=3, div_x=0, div_y=0):
     H = unitsZ * 10.0
 
     # wall and floor thickness
-    wallT = 1.0
+    wallT = 1.5
     floorT = 1.0
 
     # filename based on dimensions
@@ -72,14 +72,50 @@ def storage_tray(unitsX=3, unitsY=3, unitsZ=3, div_x=0, div_y=0):
             )
             result = result.union(divider)
 
-    # Return the generated CadQuery object and the suggested filename
+    # ADD MAGNET HOLES
+    mag_dia = 3.4
+    mag_r = mag_dia / 2.0
+    mag_depth = 1.2
+    z_level = 10.0
+
+    num_holes_y = int(W/10.0) - 1
+    num_holes_x = int(L/10.0) - 1
+
+    y_centers = [-W/2 + 10.0 + i*10.0 for i in range(num_holes_y)]
+    x_centers = [-L/2 + 10.0 + i*10.0 for i in range(num_holes_x)]
+
+    # right face (>X)
+    pts_right = [(y, z_level) for y in y_centers]
+    if pts_right: # 确保有坐标点才执行切割
+        right_holes = cq.Workplane("YZ").workplane(offset=L/2).pushPoints(pts_right).circle(mag_r).extrude(-mag_depth)
+        result = result.cut(right_holes)
+
+    # left face (<X)
+    pts_left = [(y, z_level) for y in y_centers]
+    if pts_left:
+        left_holes = cq.Workplane("YZ").workplane(offset=-L/2).pushPoints(pts_left).circle(mag_r).extrude(mag_depth)
+        result = result.cut(left_holes)
+
+    # front face (>Y)
+    pts_front = [(x, z_level) for x in x_centers]
+    if pts_front:
+        front_holes = cq.Workplane("XZ").workplane(offset=W/2).pushPoints(pts_front).circle(mag_r).extrude(-mag_depth)
+        result = result.cut(front_holes)
+
+    # back face (<Y)
+    pts_back = [(x, z_level) for x in x_centers]
+    if pts_back:
+        back_holes = cq.Workplane("XZ").workplane(offset=-W/2).pushPoints(pts_back).circle(mag_r).extrude(mag_depth)
+        result = result.cut(back_holes)
+
+    # return the generated CadQuery object and the suggested filename
     return result, filename
 
 
 # execute only if the script is run directly
 if __name__ == "__main__":
     # generate using default parameters
-    tray_stl, fname = storage_tray(unitsX=3, unitsY=3, unitsZ=3, div_x=0, div_y=0)
+    tray_stl, fname = storage_tray(unitsX=4, unitsY=4, unitsZ=8, div_x=0, div_y=0)
 
     # save the file
     cq.exporters.export(tray_stl, fname)

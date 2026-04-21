@@ -70,6 +70,8 @@ const UserInput = () => {
             length: 3,
             width: 3,
             height: 'short',
+            divX: 0,
+            divY: 0,
           });
         }
       } else {
@@ -96,13 +98,35 @@ const UserInput = () => {
     });
   };
 
-  // enforce min/max tray size on blur
+  // enforce min/max tray size and dynamic divider limits on blur
   const handleTrayDimBlur = (index, field, value) => {
     setTrays((prev) => {
       const newTrays = [...prev];
       let num = parseInt(value, 10) || 0;
-      if (num < 3) num = 3; // force min 3cm
-      if (num > 20) num = 20; // force max 20cm
+
+      // length and width limits
+      if (field === 'length' || field === 'width') {
+        if (num < 3) num = 3;
+        if (num > 20) num = 20;
+
+        // ensure existing sections don't exceed the new smaller size.
+        if (field === 'length' && newTrays[index].divX > num) {
+          newTrays[index].divX = num;
+        }
+        if (field === 'width' && newTrays[index].divY > num) {
+          newTrays[index].divY = num;
+        }
+      }
+      // div limit
+      else if (field === 'divX') {
+        if (num < 0) num = 0;
+        if (num > newTrays[index].length) num = newTrays[index].length;
+      }
+      else if (field === 'divY') {
+        if (num < 0) num = 0;
+        if (num > newTrays[index].width) num = newTrays[index].width;
+      }
+
       newTrays[index][field] = num;
       return newTrays;
     });
@@ -152,10 +176,12 @@ const UserInput = () => {
 
     const payload = {
       items: items,
-      trays: trays.map(({ length, width, height }) => ({
+      trays: trays.map(({ length, width, height, divX, divY }) => ({
         length: Math.max(3, length),
         width: Math.max(3, width),
-        height
+        height,
+        divX: Math.max(0, divX || 0),
+        divY: Math.max(0, divY || 0)
       })),
       availableSpace: coordList
     };
@@ -341,11 +367,11 @@ const UserInput = () => {
                   borderRadius: '8px',
                 }}
             >
-              <h4 style={{ marginTop: 0 }}>Tray Dimensions (min 3cm, max 20cm)</h4>
+              <h4 style={{ marginTop: 0 }}>Tray Dimensions & Dividers</h4>
               <div
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))',
                     gap: '15px',
                   }}
               >
@@ -353,23 +379,44 @@ const UserInput = () => {
                     <div
                         key={tray.id}
                         style={{
-                          padding: '10px',
+                          padding: '15px',
                           backgroundColor: '#fff',
                           border: '1px solid #eee',
-                          borderRadius: '4px',
+                          borderRadius: '6px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '12px',
                         }}
                     >
-                      <strong>Tray {index + 1}</strong>
+                      {/* Header & Height Row */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <strong>Tray {index + 1}</strong>
+                        <select
+                            value={tray.height}
+                            onChange={(e) =>
+                                handleTrayDimChange(index, 'height', e.target.value)
+                            }
+                            style={{ padding: '4px', cursor: 'pointer' }}
+                        >
+                          <option value="short">Short (30mm)</option>
+                          <option value="high">High (80mm)</option>
+                        </select>
+                      </div>
+
+                      {/* Length Binding Group */}
                       <div
                           style={{
                             display: 'flex',
-                            gap: '10px',
-                            marginTop: '10px',
+                            justifyContent: 'space-between',
                             alignItems: 'center',
+                            backgroundColor: '#f8f9fa',
+                            padding: '10px',
+                            borderRadius: '4px',
+                            border: '1px solid #e9ecef'
                           }}
                       >
-                        <label>
-                          L:{' '}
+                        <label style={{ display: 'flex', alignItems: 'center', fontWeight: '500' }}>
+                          Length:{' '}
                           <input
                               type="number"
                               min="3"
@@ -382,12 +429,43 @@ const UserInput = () => {
                               onBlur={(e) =>
                                   handleTrayDimBlur(index, 'length', e.target.value)
                               }
-                              style={{ width: '50px', padding: '4px' }}
+                              style={{ width: '40px', padding: '4px', margin: '0 5px' }}
                           />{' '}
                           cm
                         </label>
-                        <label>
-                          W:{' '}
+                        <label style={{ fontSize: '14px', color: '#495057' }}>
+                          Length Sections:{' '}
+                          <input
+                              type="number"
+                              min="0"
+                              max={tray.length}
+                              onKeyDown={preventInvalidKeys}
+                              value={tray.divX === 0 ? '' : tray.divX}
+                              onChange={(e) =>
+                                  handleTrayDimChange(index, 'divX', e.target.value)
+                              }
+                              onBlur={(e) =>
+                                  handleTrayDimBlur(index, 'divX', e.target.value)
+                              }
+                              style={{ width: '40px', padding: '4px', marginLeft: '5px' }}
+                          />
+                        </label>
+                      </div>
+
+                      {/* Width Binding Group */}
+                      <div
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            backgroundColor: '#f8f9fa',
+                            padding: '10px',
+                            borderRadius: '4px',
+                            border: '1px solid #e9ecef'
+                          }}
+                      >
+                        <label style={{ display: 'flex', alignItems: 'center', fontWeight: '500' }}>
+                          Width:{' '}
                           <input
                               type="number"
                               min="3"
@@ -400,20 +478,27 @@ const UserInput = () => {
                               onBlur={(e) =>
                                   handleTrayDimBlur(index, 'width', e.target.value)
                               }
-                              style={{ width: '50px', padding: '4px' }}
+                              style={{ width: '40px', padding: '4px', margin: '0 5px' }}
                           />{' '}
                           cm
                         </label>
-                        <select
-                            value={tray.height}
-                            onChange={(e) =>
-                                handleTrayDimChange(index, 'height', e.target.value)
-                            }
-                            style={{ padding: '4px', marginLeft: 'auto' }}
-                        >
-                          <option value="short">Short (30mm)</option>
-                          <option value="high">High (80mm)</option>
-                        </select>
+                        <label style={{ fontSize: '14px', color: '#495057' }}>
+                          Width Sections:{' '}
+                          <input
+                              type="number"
+                              min="0"
+                              max={tray.width}
+                              onKeyDown={preventInvalidKeys}
+                              value={tray.divY === 0 ? '' : tray.divY}
+                              onChange={(e) =>
+                                  handleTrayDimChange(index, 'divY', e.target.value)
+                              }
+                              onBlur={(e) =>
+                                  handleTrayDimBlur(index, 'divY', e.target.value)
+                              }
+                              style={{ width: '40px', padding: '4px', marginLeft: '5px' }}
+                          />
+                        </label>
                       </div>
                     </div>
                 ))}
