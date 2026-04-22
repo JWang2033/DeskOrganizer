@@ -1,3 +1,4 @@
+import math
 import cadquery as cq
 
 # Slot dimensions (Width, Depth, Height)
@@ -40,6 +41,15 @@ def make_sd_holder(
     total_rows = rows_small + rows_large
     last_depth = small_size[1] if total_rows <= rows_small else large_size[1]
     outer_y = get_row_y(total_rows - 1) + last_depth + margin
+
+    # Round outer dimensions up to the nearest 10 mm (1 cm grid)
+    # Slot sizes, gaps, and margins are intentionally kept exact.
+    def ceil10(v: float) -> float:
+        return math.ceil(v / 10) * 10
+
+    outer_x = ceil10(outer_x)
+    outer_y = ceil10(outer_y)
+    holder_height = ceil10(holder_height)
 
     result = cq.Workplane("XY").box(
         outer_x, outer_y, holder_height, centered=(False, False, False)
