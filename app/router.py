@@ -23,6 +23,8 @@ class Tray(BaseModel):
     length: int
     width: int
     height: str  # "short" or "high"
+    divX: int = 0
+    divY: int = 0
 
 
 class GenerateOrganizerRequest(BaseModel):
@@ -40,11 +42,15 @@ def generate_organizer(req: GenerateOrganizerRequest):
 
     result = run_pipeline(req.items, req.trays, req.availableSpace)
 
-    if not result["modules"]:
+    if result["unplaced"]:
+        details = ", ".join(
+            f"{m['type']} {m['w']}x{m['h']}" for m in result["unplaced"]
+        )
         raise HTTPException(
             400,
-            f"Nothing could be placed. {len(result['unplaced_ids'])} module(s) "
-            f"did not fit in the selected space.",
+            f"Cannot fit all modules in the selected space. "
+            f"{len(result['unplaced'])} module(s) did not fit: {details}. "
+            f"Remove some modules or expand the work area.",
         )
 
     zip_buf = io.BytesIO()
@@ -68,6 +74,5 @@ def generate_organizer(req: GenerateOrganizerRequest):
         headers={
             "Content-Disposition": 'attachment; filename="organizer.zip"',
             "X-Placements": str(len(result["placements"])),
-            "X-Unplaced": ",".join(str(i) for i in result["unplaced_ids"]),
         },
     )

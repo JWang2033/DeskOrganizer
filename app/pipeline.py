@@ -13,9 +13,11 @@ from app.algorithm_generate import GRID_SIZE, generate_layout
 from app.cad.pen_holder_cadquery import make_pen_holder
 from app.cad.sd_holder_cadquery import make_sd_holder
 from app.cad.storage_tray import storage_tray
+from app.cad.tray_lid import LID_THICKNESS, make_tray_lid
 
 CELL_MM = 10
 TRAY_HEIGHT_MM = {"short": 30, "high": 80}
+LEVEL_STEP_MM = 33
 
 
 def pen_rows(num_pens: int) -> int:
@@ -77,11 +79,15 @@ def build_modules(items, trays) -> list[dict]:
         height_mm = TRAY_HEIGHT_MM.get(tray.height, 30)
         units_z = max(3, int(height_mm / 10))
         cad, _ = storage_tray(
-            unitsX=tray.length, unitsY=tray.width, unitsZ=units_z
+            unitsX=tray.length, unitsY=tray.width, unitsZ=units_z,
+            div_x=tray.divX, div_y=tray.divY,
         )
         cad = _to_positive_octant(cad)
         w, h = _bbox_cells(cad)
-        modules.append({"id": next_id, "type": "tray", "w": w, "h": h, "cad": cad})
+        modules.append({
+            "id": next_id, "type": "tray", "w": w, "h": h, "cad": cad,
+            "tray_height": tray.height,
+        })
         next_id += 1
 
     return modules
@@ -111,7 +117,8 @@ def position_modules(modules: list[dict], placements: list[dict]) -> list[dict]:
         # Algorithm (x=row, y=col) -> CAD (cad_x=col*10, cad_y=row*10).
         cad_x = p["y"] * CELL_MM
         cad_y = p["x"] * CELL_MM
-        cad = cad.translate((cad_x, cad_y, 0))
+        cad_z = p.get("level", 0) * LEVEL_STEP_MM
+        cad = cad.translate((cad_x, cad_y, cad_z))
 
         positioned.append({
             "id": m["id"],
@@ -130,25 +137,106 @@ def combine(positioned: list[dict]) -> cq.Workplane | None:
     return combined
 
 
+def _space_from_placements(placements: list[dict], stackable_ids: set, grid_size: int = GRID_SIZE) -> list[list[int]]:
+    """Build an available_space grid from the footprints of given placed modules."""
+    grid = [[0] * grid_size for _ in range(grid_size)]
+    for p in placements:
+        if p["id"] not in stackable_ids:
+            continue
+        for i in range(p["h"]):
+            for j in range(p["w"]):
+                r, c = p["x"] + i, p["y"] + j
+                if 0 <= r < grid_size and 0 <= c < grid_size:
+                    grid[r][c] = 1
+    return grid
+
+
+def _footprint_overlaps(a: dict, b: dict) -> bool:
+    return not (
+        a["x"] + a["h"] <= b["x"] or b["x"] + b["h"] <= a["x"]
+        or a["y"] + a["w"] <= b["y"] or b["y"] + b["w"] <= a["y"]
+    )
+
+
+def build_tray_lids(placements: list[dict], short_tray_ids: set) -> list[dict]:
+    """Generate a positioned lid for every short tray that has a module stacked on top."""
+    by_level: dict[int, list[dict]] = {}
+    for p in placements:
+        by_level.setdefault(p.get("level", 0), []).append(p)
+
+    lids: list[dict] = []
+    for p in placements:
+        if p["id"] not in short_tray_ids:
+            continue
+        level = p.get("level", 0)
+        upper = by_level.get(level + 1, [])
+        if not any(_footprint_overlaps(p, u) for u in upper):
+            continue
+
+        lid_cad = make_tray_lid(units_x=p["w"], units_y=p["h"])
+        cx = p["y"] * CELL_MM + p["w"] * CELL_MM / 2
+        cy = p["x"] * CELL_MM + p["h"] * CELL_MM / 2
+        cz = level * LEVEL_STEP_MM + (LEVEL_STEP_MM - LID_THICKNESS)
+        lid_cad = lid_cad.translate((cx, cy, cz))
+
+        lids.append({
+            "id": p["id"],
+            "type": "lid",
+            "placement": p,
+            "cad": lid_cad,
+        })
+
+    return lids
+
+
+def _pack_one_level(space: list[list[int]], module_list: list[dict], short_tray_ids: set) -> tuple[list[dict], list[dict]]:
+    """Pack modules onto one level, with a short-trays-first fallback."""
+    placed, unplaced = generate_layout(space, module_list)
+    if not unplaced:
+        return placed, unplaced
+
+    short_trays = [m for m in module_list if m["id"] in short_tray_ids]
+    if not short_trays:
+        return placed, unplaced
+
+    rest = [m for m in module_list if m["id"] not in short_tray_ids]
+    trays_placed, trays_unplaced = generate_layout(space, short_trays)
+    rest_placed, rest_unplaced = generate_layout(
+        space, rest + trays_unplaced, preplaced=trays_placed
+    )
+    return trays_placed + rest_placed, rest_unplaced
+
+
 def run_pipeline(items, trays, available_space) -> dict:
     modules = build_modules(items, trays)
-    space = build_space(available_space)
+    short_tray_ids = {m["id"] for m in modules if m["type"] == "tray" and m.get("tray_height") == "short"}
 
-    module_list = [
+    pending = [
         {"id": m["id"], "type": m["type"], "w": m["w"], "h": m["h"]}
         for m in modules
     ]
-    placements = generate_layout(space, module_list)
+    space = build_space(available_space)
 
-    positioned = position_modules(modules, placements)
+    all_placements: list[dict] = []
+    level = 0
+    while pending:
+        placed, pending = _pack_one_level(space, pending, short_tray_ids)
+        for p in placed:
+            p["level"] = level
+        all_placements.extend(placed)
+
+        if not pending or not any(p["id"] in short_tray_ids for p in placed):
+            break
+        space = _space_from_placements(placed, short_tray_ids)
+        level += 1
+
+    positioned = position_modules(modules, all_placements)
+    positioned.extend(build_tray_lids(all_placements, short_tray_ids))
     combined = combine(positioned)
 
     return {
-        "placements": placements,
+        "placements": all_placements,
         "modules": positioned,
         "combined": combined,
-        "unplaced_ids": [
-            m["id"] for m in modules
-            if m["id"] not in {p["id"] for p in placements}
-        ],
+        "unplaced": pending,
     }

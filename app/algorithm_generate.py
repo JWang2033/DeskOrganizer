@@ -106,7 +106,7 @@ def mock_modules_2():
 # Core Algorithm  (greedy — no backtracking)
 # =========================
 
-def generate_layout(space, module_list):
+def generate_layout(space, module_list, preplaced=None):
     """
     Greedy layout engine — maximises side contact.
 
@@ -119,6 +119,9 @@ def generate_layout(space, module_list):
          cells on the frontier of that type, keeping same-type modules together.
       4. Pick the highest-scoring valid position.  Ties are broken by row-major
          order so output is deterministic — O(modules × cells).
+
+    preplaced: placements whose cells are treated as occupied for scoring and
+    collision, but not included in the returned placements.
     """
 
     grid     = [[0]    * GRID_SIZE for _ in range(GRID_SIZE)]
@@ -184,6 +187,11 @@ def generate_layout(space, module_list):
                     if 0 <= nx < GRID_SIZE and 0 <= ny < GRID_SIZE:
                         if grid[nx][ny] == 0 and space[nx][ny] == 1:
                             frontier.add((nx, ny))
+
+    if preplaced:
+        for p in preplaced:
+            do_place(p["w"], p["h"], p["x"], p["y"], p["type"])
+            placed_types[p["type"]] = placed_types.get(p["type"], 0) + 1
 
     # ---------- greedy placement ----------
     for module in module_list:
