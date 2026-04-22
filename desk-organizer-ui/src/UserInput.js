@@ -367,7 +367,7 @@ const UserInput = () => {
                   borderRadius: '8px',
                 }}
             >
-              <h4 style={{ marginTop: 0 }}>Tray Dimensions & Dividers</h4>
+              <h4 style={{ marginTop: 0 }}>Tray Dimensions & Sections</h4>
               <div
                   style={{
                     display: 'grid',

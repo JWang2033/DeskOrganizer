@@ -48,6 +48,32 @@ def make_pen_holder(
         .cutBlind(-slot_depth)
     )
 
+    # ADD MAGNET HOLES
+    mag_dia = 3.4
+    mag_r = mag_dia / 2.0
+    mag_depth = 1.2
+    z_level = 11.0
+
+    num_holes_y = int(outer_y / 10.0) - 1
+    num_holes_x = int(outer_x / 10.0) - 1
+
+    y_centers = [10.0 + i * 10.0 for i in range(num_holes_y)]
+    x_centers = [10.0 + i * 10.0 for i in range(num_holes_x)]
+
+    if y_centers:
+        pts = [(y, z_level) for y in y_centers]
+        right_holes = cq.Workplane("YZ").workplane(offset=outer_x).pushPoints(pts).circle(mag_r).extrude(-mag_depth)
+        result = result.cut(right_holes)
+        left_holes = cq.Workplane("YZ").workplane(offset=0).pushPoints(pts).circle(mag_r).extrude(mag_depth)
+        result = result.cut(left_holes)
+
+    if x_centers:
+        pts = [(x, z_level) for x in x_centers]
+        front_holes = cq.Workplane("XZ").workplane(offset=-outer_y).pushPoints(pts).circle(mag_r).extrude(mag_depth)
+        result = result.cut(front_holes)
+        back_holes = cq.Workplane("XZ").workplane(offset=0).pushPoints(pts).circle(mag_r).extrude(-mag_depth)
+        result = result.cut(back_holes)
+
     if export_path:
         cq.exporters.export(result, export_path)
 
