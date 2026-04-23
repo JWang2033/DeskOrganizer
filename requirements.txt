@@ -3,4 +3,5 @@ uvicorn
 openai
 pydantic
 python-dotenv
+pytest
 cadquery

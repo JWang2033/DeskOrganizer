@@ -29,10 +29,6 @@ def mock_modules():
         {"id": 2, "type": "pen",  "w": 2, "h": 3},
         {"id": 3, "type": "tray", "w": 4, "h": 6},
         {"id": 4, "type": "tray", "w": 5, "h": 7},
-        {"id": 5, "type": "sd",   "w": 3, "h": 2},
-        {"id": 6, "type": "pen",  "w": 2, "h": 2},
-        {"id": 7, "type": "pen",  "w": 2, "h": 3},
-        {"id": 8, "type": "tray", "w": 4, "h": 6},
     ]
 
 
